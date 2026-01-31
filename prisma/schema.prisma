@@ -1,0 +1,314 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  COACH
+  CLIENT
+}
+
+enum FoodSource {
+  LOCAL
+  USDA
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  clientProfile ClientProfile?
+  coachClients  ClientProfile[] @relation("CoachClients")
+
+  sentMessages     Message[] @relation("MessageSender")
+  receivedMessages Message[] @relation("MessageRecipient")
+
+  createdMealPlans MealPlan[] @relation("CoachMealPlans")
+  mealPlanItems    MealPlanItem[] @relation("CoachMealPlanItems")
+}
+
+model ClientProfile {
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  coachId        String
+  name           String
+  goals          String?
+  caloriesTarget Int
+  proteinTarget  Int
+  carbsTarget    Int
+  fatsTarget     Int
+  waterTargetMl  Int
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user   User @relation(fields: [userId], references: [id])
+  coach  User @relation("CoachClients", fields: [coachId], references: [id])
+
+  waterLogs  WaterLog[]
+  weightLogs WeightLog[]
+  photoLogs  PhotoLog[]
+  checkIns   CheckIn[]
+  workouts   WorkoutLog[]
+
+  mealPlanAssignments MealPlanAssignment[]
+  mealLogs            MealLog[] @relation("ClientMealLogs")
+  mealPlanItems       MealPlanItem[] @relation("ClientMealPlanItems")
+}
+
+model MealPlanItem {
+  id          String   @id @default(cuid())
+  coachId     String
+  clientId    String
+  title       String
+  calories    Int?
+  protein     Int?
+  carbs       Int?
+  fats        Int?
+  notes       String?
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  coach  User          @relation("CoachMealPlanItems", fields: [coachId], references: [id])
+  client ClientProfile @relation("ClientMealPlanItems", fields: [clientId], references: [id])
+}
+
+model MealLog {
+  id                     String               @id @default(cuid())
+  clientId               String
+  mealPlanAssignmentId   String?
+  mealPlanDayId          String?
+  mealPlanMealId         String?
+  date                   DateTime
+  name                   String
+  status                 MealLogStatus        @default(PLANNED)
+  plannedCaloriesTotal   Int?
+  consumedCaloriesTotal  Int?
+  complianceStatus       MealComplianceStatus @default(UNKNOWN)
+  coachNote              String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  client           ClientProfile        @relation("ClientMealLogs", fields: [clientId], references: [id])
+  assignment       MealPlanAssignment?  @relation(fields: [mealPlanAssignmentId], references: [id], onDelete: SetNull)
+  planDay          MealPlanDay?         @relation("MealPlanDayLogs", fields: [mealPlanDayId], references: [id], onDelete: SetNull)
+  planMeal         MealPlanMeal?        @relation("MealPlanMealLogs", fields: [mealPlanMealId], references: [id], onDelete: SetNull)
+  items            MealLogItem[]
+
+  @@index([clientId, date])
+  @@index([mealPlanAssignmentId])
+  @@unique([clientId, date, mealPlanMealId])
+}
+
+model MealLogItem {
+  id               String   @id @default(cuid())
+  mealLogId        String
+  mealPlanFoodId   String?
+  name             String
+  plannedQuantity  Float?
+  plannedUnit      String?
+  plannedCalories  Int?
+  plannedProtein   Int?
+  plannedCarbs     Int?
+  plannedFats      Int?
+  consumedQuantity Float?
+  consumedCalories Int?
+  consumedProtein  Int?
+  consumedCarbs    Int?
+  consumedFats     Int?
+  isExtra          Boolean  @default(false)
+
+  mealLog      MealLog        @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
+  mealPlanFood MealPlanFood?  @relation("MealPlanFoodLogItems", fields: [mealPlanFoodId], references: [id], onDelete: SetNull)
+
+  @@index([mealLogId])
+  @@index([mealPlanFoodId])
+}
+
+model WaterLog {
+  id        String   @id @default(cuid())
+  clientId  String
+  date      DateTime
+  amountMl  Int
+  createdAt DateTime @default(now())
+
+  client ClientProfile @relation(fields: [clientId], references: [id])
+}
+
+model WeightLog {
+  id         String   @id @default(cuid())
+  clientId   String
+  date       DateTime
+  weightKg   Float
+  bodyFatPct Float?
+  createdAt  DateTime @default(now())
+
+  client ClientProfile @relation(fields: [clientId], references: [id])
+}
+
+model PhotoLog {
+  id        String   @id @default(cuid())
+  clientId  String
+  date      DateTime
+  imageUrl  String
+  notes     String?
+  coachNote String?
+  createdAt DateTime @default(now())
+
+  client ClientProfile @relation(fields: [clientId], references: [id])
+}
+
+model WorkoutLog {
+  id        String   @id @default(cuid())
+  clientId  String
+  date      DateTime
+  title     String
+  details   Json
+  createdAt DateTime @default(now())
+
+  client ClientProfile @relation(fields: [clientId], references: [id])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  createdAt   DateTime @default(now())
+
+  sender    User @relation("MessageSender", fields: [senderId], references: [id])
+  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id])
+}
+
+model CheckIn {
+  id        String   @id @default(cuid())
+  clientId  String
+  weekOf    DateTime
+  formJson  Json
+  coachNote String?
+  createdAt DateTime @default(now())
+
+  client ClientProfile @relation(fields: [clientId], references: [id])
+}
+
+enum MealLogStatus {
+  PLANNED
+  EATEN
+  SKIPPED
+}
+
+enum MealComplianceStatus {
+  UNKNOWN
+  UNDER
+  MET
+  OVER
+}
+
+enum MealPlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model MealPlan {
+  id          String         @id @default(cuid())
+  coachId     String
+  name        String
+  description String?
+  status      MealPlanStatus @default(DRAFT)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  coach       User                @relation("CoachMealPlans", fields: [coachId], references: [id], onDelete: Cascade)
+  days        MealPlanDay[]
+  assignments MealPlanAssignment[]
+
+  @@index([coachId])
+}
+
+model MealPlanDay {
+  id         String      @id @default(cuid())
+  mealPlanId String
+  dayIndex   Int
+  title      String
+
+  mealPlan MealPlan     @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  meals    MealPlanMeal[]
+  logs     MealLog[]    @relation("MealPlanDayLogs")
+
+  @@unique([mealPlanId, dayIndex])
+  @@index([mealPlanId])
+}
+
+model MealPlanMeal {
+  id           String        @id @default(cuid())
+  mealPlanDayId String
+  name         String
+  timeLabel    String?
+  sortOrder    Int           @default(0)
+
+  day   MealPlanDay   @relation(fields: [mealPlanDayId], references: [id], onDelete: Cascade)
+  foods MealPlanFood[]
+  logs  MealLog[]     @relation("MealPlanMealLogs")
+
+  @@index([mealPlanDayId])
+}
+
+model MealPlanFood {
+  id            String   @id @default(cuid())
+  mealPlanMealId String
+  name          String
+  quantity      Float
+  unit          String
+  calories      Int
+  protein       Int
+  carbs         Int
+  fats          Int
+
+  meal     MealPlanMeal   @relation(fields: [mealPlanMealId], references: [id], onDelete: Cascade)
+  logItems MealLogItem[]  @relation("MealPlanFoodLogItems")
+
+  @@index([mealPlanMealId])
+}
+
+model MealPlanAssignment {
+  id          String   @id @default(cuid())
+  mealPlanId  String
+  clientId    String
+  startDate   DateTime
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+
+  mealPlan MealPlan      @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  client   ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  logs     MealLog[]
+
+  @@index([clientId])
+  @@index([mealPlanId])
+}
+
+model Food {
+  id           String     @id @default(cuid())
+  name         String
+  brand        String?
+  source       FoodSource @default(LOCAL)
+  servingSize  Float
+  servingUnit  String
+  calories     Int
+  protein      Float
+  carbs        Float
+  fats         Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([name, brand, source])
+  @@index([name])
+  @@index([source])
+}
